@@ -138,6 +138,52 @@ cp .env.example .env
 
 ---
 
+## Docker 部署
+
+镜像内置 **Node.js + Chromium**（支持 Z.AI JWT/Plan 通道的免浏览器验证码求解），一条命令起服务：
+
+```bash
+cp .env.example .env        # 至少改 ZCODE_ADMIN_KEY；生产再设 ZCODE_GATEWAY_KEY
+docker compose up -d --build
+```
+
+- 服务监听 `127.0.0.1:${ZCODE_PORT:-3000}`（仅本机回环，不直接暴露公网，公网只经 Caddy）。
+- 账号/设置持久化在宿主机 `./data/`（SQLite，WAL 模式）。
+- 后台：`http://127.0.0.1:3000/admin/login`；对话端点同上 `/v1/messages`、`/v1/chat/completions`。
+- 常用命令：`docker compose logs -f`、`docker compose down`、改代码后 `docker compose up -d --build`。
+- 在容器内加账号：`docker compose exec zcode-hub python cli.py add-account zai <名称> <apiKey>`。
+
+> 镜像内置 Node.js 20 + Chromium（≈2GB），故 Z.AI **JWT(Plan) 通道**的免浏览器验证码求解可用。
+> 若只需 `zai` API Key / `bigmodel`（免验证码），可删去 Dockerfile 中的 apt(chromium/nodejs) 与 npm 段得到轻量版。
+
+### 用 Caddy 反代（宿主机 Caddy 容器）
+
+公网只经宿主机上的 **Caddy 容器**（如 compose 项目 `caddy`）。因为 Caddy 在容器里、够不到宿主机 `127.0.0.1`，所以经**共享 Docker 网络**按容器名反代；域名走 Cloudflare 代理，证书用 **DNS-01**（`CF_API_TOKEN`）。仓库根 [`Caddyfile`](Caddyfile) 提供站点块：
+
+```
+zcode2api.061995.xyz {
+    reverse_proxy http://zcode-hub:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        flush_interval -1        # SSE 流式不缓冲
+    }
+    @not_sse not path /v1/messages /v1/chat/completions
+    encode @not_sse zstd gzip
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+```
+
+前置：`zcode-hub` 与 Caddy 在**同一 Docker 网络**（本仓库 compose 已声明 `external: zcode-net`），且 Caddy 配好 `CF_API_TOKEN`。并入 Caddy 配置后校验并热重载：
+
+```bash
+docker exec caddy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker exec caddy-caddy-1 caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
 ## API 协议接口规范
 
 ### Anthropic Messages 协议 (`POST /v1/messages`)

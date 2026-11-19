@@ -1,0 +1,41 @@
+# ── VCS / CI ──
+.git
+.github
+.gitignore
+.gitattributes
+
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Node（captcha_node）──
+node_modules/
+
+# ── 运行时数据 / 秘钥（永不入镜像）──
+data/
+*.db
+*.db-wal
+*.db-shm
+*.zsb
+.env
+*accounts*.json
+zcode-accounts*.json
+
+# ── 文档 / 测试 / 脚本（运行不需要）──
+tests/
+docs/
+scripts/
+
+# ── Docker 自身 ──
+Dockerfile
+docker-compose.yml
+.dockerignore
+Caddyfile

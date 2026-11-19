@@ -1,0 +1,31 @@
+# 站点块：宿主机 Caddy 容器（compose 项目 caddy，容器 caddy-caddy-1）反代 zcode-hub。
+# 这是给 /opt/caddy/Caddyfile 的增量片段——把下面站点块并入该文件末尾即可。
+#
+# 与 zcode-hub 的 Docker 部署配套的三个关键点：
+#   1) Caddy 跑在容器里，够不到宿主机 127.0.0.1，故走共享 Docker 网络按容器名访问：
+#        reverse_proxy http://zcode-hub:3000
+#      （zcode-hub 需加入 Caddy 所在网络；本仓库 compose 已声明 external: zcode-net）
+#   2) 域名经 Cloudflare 代理，证书用 DNS-01（CF API Token），与现有站点一致：
+#        tls { dns cloudflare {env.CF_API_TOKEN} }
+#   3) SSE 流式（/v1/messages、/v1/chat/completions）不缓冲、不压缩。
+#
+# 应用：
+#   docker exec caddy-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   docker exec caddy-caddy-1 caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+
+zcode2api.061995.xyz {
+	reverse_proxy http://zcode-hub:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		# SSE 流式立即转发，不缓冲
+		flush_interval -1
+	}
+	# 压缩静态资源，但绝不压缩事件流
+	@not_sse not path /v1/messages /v1/chat/completions
+	encode @not_sse zstd gzip
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+}

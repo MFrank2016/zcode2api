@@ -1,0 +1,31 @@
+# zcode-hub 单服务编排（轻量 / API-Key 模式）。
+# 公网流量由「宿主机上的 Caddy 容器」经共享 Docker 网络反代（见 ./Caddyfile）。
+#
+# 用法：
+#   cp .env.example .env      # 至少改 ZCODE_ADMIN_KEY（生产再设 ZCODE_GATEWAY_KEY）
+#   docker compose up -d --build
+#   本机调试: http://127.0.0.1:${ZCODE_PORT:-3000}/admin/login
+
+services:
+  zcode-hub:
+    build:
+      context: .
+    image: zcode-hub:latest
+    container_name: zcode-hub
+    env_file:
+      - .env
+    # 仅绑定本机回环：不直接暴露公网（公网只经 Caddy）
+    ports:
+      - "127.0.0.1:${ZCODE_PORT:-3000}:${ZCODE_PORT:-3000}"
+    volumes:
+      # SQLite 账号/设置持久化（data/accounts.db，WAL）
+      - ./data:/app/data
+    networks:
+      # 与 Caddy 容器共享的网络：Caddy 以 http://zcode-hub:3000 访问本服务。
+      # 该网络由宿主机 Caddy 栈（/opt/caddy）创建并已存在。
+      - zcode-net
+    restart: unless-stopped
+
+networks:
+  zcode-net:
+    external: true
